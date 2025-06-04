@@ -1,0 +1,150 @@
+const mongoose = require("mongoose");
+
+const BookingSchema = new mongoose.Schema({
+
+  // References
+  ad: {
+    type: mongoose.Types.ObjectId,
+    ref: 'Ad',
+    required: true
+  },
+  renter: {
+    type: mongoose.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  owner: {
+    type: mongoose.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  
+  // Booking dates
+  startDate: {
+    type: Date,
+    required: true
+  },
+  endDate: {
+    type: Date,
+    required: true
+  },
+  bookedDates: [{
+    type: Date,
+    required: true
+  }],
+  
+  // Financial details
+  totalAmount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  deposit: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  
+  // Status tracking
+  status: {
+    type: String,
+    enum: ['pending', 'confirmed', 'active', 'completed', 'cancelled', 'rejected','hold'],
+    default: 'pending'
+  },
+  
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'completed', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  paymentMethod: {
+  type: String,
+  enum: ['tpay', 'bank_transfer', 'cash', 'other'],
+  default: 'tpay'
+},
+paymentId: String, // T-Pay transaction ID
+paymentUrl: String, // Generated payment URL
+paymentAttempts: {
+  type: Number,
+  default: 0
+},
+paymentExpiry: Date,
+  // Additional details
+  specialRequests: String,
+  rejectionReason: String,
+  // Contact info
+  renterContact: {
+    phone: String,
+    email: String
+  },
+  
+  // Cancellation info
+  cancellationReason: String,
+  cancelledBy: {
+    type: mongoose.Types.ObjectId,
+    ref: 'User'
+  },
+  cancelledAt: Date,
+  
+  // Confirmation timestamps
+  confirmedAt: Date,
+  rejectedAt: Date,
+  
+  // Pickup/Return tracking
+  pickupStatus: {
+    type: String,
+    enum: ['pending', 'completed'],
+    default: 'pending'
+  },
+  returnStatus: {
+    type: String,
+    enum: ['pending', 'completed'],
+    default: 'pending'
+  },
+  holdExpiresAt: {
+  type: Date,
+  index: { expires: 0 } 
+},
+  pickupConfirmedAt: Date,
+  returnConfirmedAt: Date
+
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Indexes
+BookingSchema.index({ bookingId: 1 });
+BookingSchema.index({ ad: 1, status: 1 });
+BookingSchema.index({ renter: 1, status: 1 });
+BookingSchema.index({ owner: 1, status: 1 });
+BookingSchema.index({ startDate: 1, endDate: 1 });
+
+// Virtual for booking duration
+BookingSchema.virtual('duration').get(function() {
+  const diffTime = Math.abs(this.endDate - this.startDate);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+});
+
+// Generate unique booking ID
+BookingSchema.pre('save', async function(next) {
+  if (!this.bookingId) {
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    this.bookingId = `BK${timestamp}${random}`;
+  }
+  next();
+});
+//delete holds
+BookingSchema.post('delete', async function(doc) {
+  if (doc.status === 'hold') {
+    await Add.findByIdAndUpdate(doc.ad, {
+      $pull: { bookedDates: { $in: doc.bookedDates } }
+    });
+    console.log(`Released dates for expired hold (${doc._id}) after 1 minute`);
+  }
+});
+
+module.exports = mongoose.model('Booking', BookingSchema);

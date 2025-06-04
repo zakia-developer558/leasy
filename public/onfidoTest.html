@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Onfido Test</title>
+  <script src="https://sdk.onfido.com/web/vlatest/onfido.min.js"></script>
+  <style>
+    #onfido-mount {
+      height: 500px;
+      margin: 20px;
+      border: 1px solid #ddd;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #0069ff;
+      color: white;
+      border: none;
+      margin: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <button id="verify-button">Start Onfido Verification</button>
+  <div id="onfido-mount"></div>
+
+  <script>
+    document.getElementById('verify-button').addEventListener('click', async () => {
+      try {
+        // Call your existing verification endpoint
+        const response = await fetch('/api/v1/auth/verify/onfido', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Include if your route requires authaa:
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2ODA5MmE3MTNkZWYzMWJkNDEzZGNiYzYiLCJlbWFpbCI6Inpha2lha2hhbnVtMTA1QGdtYWlsLmNvbSIsImlhdCI6MTc0NTYwNjAzOSwiZXhwIjoxNzQ1NjkyNDM5fQ.3xrWGN8kt86Ky4tGkJGAK-ApsbzGrTlwrc9PVBpEFO8'
+          }
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        const { sdkToken } = await response.json();
+
+        Onfido.init({
+          token: sdkToken,
+          containerId: 'onfido-mount',
+          steps: ['document', 'face'],
+          onComplete: () => {
+            alert("Verification submitted! Results will come via webhook.");
+          },
+          onError: (error) => {
+            console.error("SDK Error:", error);
+            alert("Error: " + error.message);
+          }
+        });
+      } catch (error) {
+        console.error("Failed:", error);
+        alert("Error: " + error.message);
+      }
+    });
+  </script>
+</body>
+
+</html>
