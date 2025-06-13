@@ -85,9 +85,9 @@ const BookingSchema = new mongoose.Schema({
     default: 'pending'
   },
   holdExpiresAt: {
-  type: Date,
-  index: { expires: 0 } 
-},
+    type: Date,
+    index: { expires: 0 }
+  },
   pickupConfirmedAt: Date,
   returnConfirmedAt: Date
 

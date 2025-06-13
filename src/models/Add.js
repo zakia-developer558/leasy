@@ -124,6 +124,49 @@ AdSchema.methods = {
     });
   },
 
+  // Check if dates are within availability settings
+  isWithinAvailabilitySettings: function(dates) {
+    const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const validMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+    // Filter out invalid days and months
+    const validDaysOfWeek = this.availability.daysOfWeek.filter(day => validDays.includes(day.toLowerCase()));
+    const validMonthsList = this.availability.months.filter(month => validMonths.includes(month.toLowerCase()));
+
+    // If no valid days or months are specified, consider all days/months as available
+    if (validDaysOfWeek.length === 0) validDaysOfWeek.push(...validDays);
+    if (validMonthsList.length === 0) validMonthsList.push(...validMonths);
+
+    return dates.every(date => {
+      const month = date.toLocaleString('en-US', { month: 'long' }).toLowerCase();
+      const dayOfWeek = date.toLocaleString('en-US', { weekday: 'long' }).toLowerCase();
+      
+      return validMonthsList.includes(month) && validDaysOfWeek.includes(dayOfWeek);
+    });
+  },
+
+  // Check if time is within pickup/return hours
+  isWithinOperatingHours: function(date, isPickup = true) {
+    if (!this.availability) return true; // If no availability settings, assume always available
+
+    const hours = isPickup ? this.availability.pickupHours : this.availability.returnHours;
+    if (!hours) return true; // If no hours specified, assume always available
+
+    // Parse hours (assuming format like "9:00 AM - 5:00 PM")
+    const [startTime, endTime] = hours.split(' - ').map(time => {
+      const [timeStr, period] = time.split(' ');
+      let [hours, minutes] = timeStr.split(':').map(Number);
+      if (period === 'PM' && hours !== 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+      return hours * 60 + minutes; // Convert to minutes for easier comparison
+    });
+
+    const dateObj = new Date(date);
+    const currentMinutes = dateObj.getHours() * 60 + dateObj.getMinutes();
+
+    return currentMinutes >= startTime && currentMinutes <= endTime;
+  },
+
   // Reserve dates (for pending bookings)
   reserveDates: async function(dates, session = null) {
     const options = session ? { session } : {};

@@ -67,7 +67,7 @@ const createBooking = async (bookingData, renterId) => {
   session.startTransaction();
 
   try {
-    const { adId, startDate, endDate, specialRequests, renterContact } = bookingData;
+    const { adId, startDate, endDate, specialRequests, renterContact, pickupTime, returnTime } = bookingData;
     
     // Validate input
     if (!adId || !startDate || !endDate) {
@@ -93,13 +93,45 @@ const createBooking = async (bookingData, renterId) => {
 
     // Generate dates and check availability
     const bookedDates = generateDateRange(start, end);
+    
+    // Check if dates are available (not already booked)
     if (!ad.areDatesAvailable(bookedDates)) {
       throw badRequest('Selected dates are not available', 400);
+    }
+
+    // Check if dates are within ad's availability settings
+    if (!ad.isWithinAvailabilitySettings(bookedDates)) {
+      throw badRequest('Selected dates are outside of the ad\'s availability period', 400);
+    }
+
+    // Check pickup and return times if provided
+    if (pickupTime) {
+      const pickupDateTime = new Date(start);
+      const [hours, minutes] = pickupTime.split(':').map(Number);
+      pickupDateTime.setHours(hours, minutes);
+      
+      if (!ad.isWithinOperatingHours(pickupDateTime, true)) {
+        throw badRequest('Pickup time is outside of operating hours', 400);
+      }
+    }
+
+    if (returnTime) {
+      const returnDateTime = new Date(end);
+      const [hours, minutes] = returnTime.split(':').map(Number);
+      returnDateTime.setHours(hours, minutes);
+      
+      if (!ad.isWithinOperatingHours(returnDateTime, false)) {
+        throw badRequest('Return time is outside of operating hours', 400);
+      }
     }
 
     // Calculate pricing
     const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     const totalAmount = ad.price * duration;
+
+    // Set hold expiration time (24 hours from now)
+    const holdExpiresAt = new Date();
+    holdExpiresAt.setHours(holdExpiresAt.getHours() + 24);
 
     // Create booking
     const booking = new Booking({
@@ -114,7 +146,8 @@ const createBooking = async (bookingData, renterId) => {
       specialRequests,
       renterContact,
       status: 'pending',
-      paymentStatus: 'not_required'
+      paymentStatus: 'not_required',
+      holdExpiresAt
     });
 
     // Reserve dates and save booking in transaction

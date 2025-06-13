@@ -20,6 +20,16 @@ const validateBookingCreation = [
     .isISO8601()
     .withMessage('Invalid end date format'),
     
+  body('pickupTime')
+    .optional()
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Invalid pickup time format (HH:MM)'),
+    
+  body('returnTime')
+    .optional()
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Invalid return time format (HH:MM)'),
+    
   body('renterContact.phone')
     .optional()
     .isMobilePhone()
