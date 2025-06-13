@@ -1,4 +1,4 @@
-const {updateShipmentStatus, createShipment}= require('../services/shipmentService')
+const {updateShipmentStatus, createShipment, getShipmentDetails} = require('../services/shipmentService')
 const Booking = require('../models/Booking');
 
 // Update shipment status
@@ -61,7 +61,28 @@ const create = async (req, res) => {
   }
 };
 
+// Get shipment details
+const getDetails = async (req, res) => {
+  try {
+    const { shipmentId } = req.params;
+    const userId = req.user._id;
+
+    const shipment = await getShipmentDetails(shipmentId, userId);
+
+    res.json({
+      success: true,
+      data: shipment
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   updateStatus,
-  create
+  create,
+  getDetails
 };

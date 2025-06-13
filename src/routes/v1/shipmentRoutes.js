@@ -1,8 +1,15 @@
 const express = require('express');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
-const { create, updateStatus } = require('../../controllers/shipmentController');
+const { create, updateStatus, getDetails } = require('../../controllers/shipmentController');
 
 const shipRouter = express.Router();
+
+// Get shipment details
+shipRouter.get(
+  '/:shipmentId',
+  authMiddleware,
+  getDetails
+);
 
 // Create new shipment (outbound or inbound)
 shipRouter.post(

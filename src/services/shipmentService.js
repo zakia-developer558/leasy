@@ -1,5 +1,6 @@
 const Shipment = require('../models/Shipment')
 const { ObjectId } = require('mongoose').Types;
+const { notFound, unauthorized } = require('../errors/httpError');
 
 const updateShipmentStatus = async (shipmentId, userId, newStatus) => {
   const shipment = await Shipment.findById(shipmentId).populate('booking');
@@ -60,7 +61,33 @@ const createShipment = async (bookingId, type, senderId, receiverId, shipmentDat
   return await shipment.save();
 };
 
+const getShipmentDetails = async (shipmentId, userId) => {
+  const shipment = await Shipment.findById(shipmentId)
+    .populate('booking', 'startDate endDate totalAmount status')
+    .populate('sender', 'first_name last_name email phoneNumber')
+    .populate('receiver', 'first_name last_name email phoneNumber')
+    .populate({
+      path: 'booking',
+      populate: {
+        path: 'ad',
+        select: 'title photos price'
+      }
+    });
+
+  if (!shipment) {
+    throw notFound('Shipment not found', 404);
+  }
+
+  // Check if user is authorized to view this shipment
+  if (!shipment.sender._id.equals(userId) && !shipment.receiver._id.equals(userId)) {
+    throw unauthorized('You are not authorized to view this shipment', 403);
+  }
+
+  return shipment;
+};
+
 module.exports = {
   updateShipmentStatus,
-  createShipment
+  createShipment,
+  getShipmentDetails
 };
