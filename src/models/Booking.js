@@ -51,24 +51,7 @@ const BookingSchema = new mongoose.Schema({
     enum: ['pending', 'confirmed', 'active', 'completed', 'cancelled', 'rejected','hold'],
     default: 'pending'
   },
-  
-  paymentStatus: {
-    type: String,
-    enum: ['pending', 'completed', 'failed', 'refunded'],
-    default: 'pending'
-  },
-  paymentMethod: {
-  type: String,
-  enum: ['tpay', 'bank_transfer', 'cash', 'other'],
-  default: 'tpay'
-},
-paymentId: String, // T-Pay transaction ID
-paymentUrl: String, // Generated payment URL
-paymentAttempts: {
-  type: Number,
-  default: 0
-},
-paymentExpiry: Date,
+
   // Additional details
   specialRequests: String,
   rejectionReason: String,

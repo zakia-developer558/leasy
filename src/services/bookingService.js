@@ -1,11 +1,19 @@
 const mongoose = require('mongoose');
-const { badRequest, notFound } = require("../errors/httpError");
+const { badRequest, notFound, unauthorized } = require("../errors/httpError");
 const Add = require("../models/Add");
 const Booking = require("../models/Booking");
 const crypto = require('crypto');
 const axios = require('axios');
 const FormData = require('form-data');
 const { ObjectId } = require('mongoose').Types;
+const { 
+  sendBookingCreationEmails, 
+  sendBookingConfirmationEmails,
+  sendBookingRejectionEmails,
+  sendBookingCancellationEmails,
+  sendBookingStatusUpdateEmails
+} = require('../utils/sendMail');
+
 const checkDateAvailability = async (adId, dates, bookingIdToExclude = null, session = null) => {
   const options = session ? { session } : {};
   const ad = await Add.findById(adId, null, options).lean();
@@ -105,9 +113,8 @@ const createBooking = async (bookingData, renterId) => {
       deposit: ad.deposit || 0,
       specialRequests,
       renterContact,
-      status: 'hold', // New status for temporary holds
-      paymentStatus: 'pending',
-      holdExpiresAt: new Date(Date.now() + 1* 60 * 1000) // 24 hours from now
+      status: 'pending',
+      paymentStatus: 'not_required'
     });
 
     // Reserve dates and save booking in transaction
@@ -115,35 +122,16 @@ const createBooking = async (bookingData, renterId) => {
     await booking.save({ session });
     await session.commitTransaction();
 
-    // Generate payment link with T-Pay
-    const paymentLink = await generateTPayPaymentLink({
-      bookingId: booking._id,
-      amount: totalAmount,
-      customerEmail: renterContact.email,
-      customerPhone: renterContact.phone,
-      description: `Booking for ${ad.title}`
-    });
-
-    await Booking.findByIdAndUpdate(
-  booking._id,
-  { 
-    paymentUrl: paymentLink,
-    paymentMethod: 'tpay',
-    paymentExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h expiry example
-  },
-  { new: true }
-);
-
-    // Return populated booking with payment link
+    // Return populated booking
     const populatedBooking = await Booking.findById(booking._id)
       .populate('ad', 'title photos price')
-      .populate('renter', 'first_name last_name')
-      .populate('owner', 'first_name last_name');
+      .populate('renter', 'first_name last_name email')
+      .populate('owner', 'first_name last_name email');
 
-    return {
-      ...populatedBooking.toObject(),
-      paymentLink
-    };
+    // Send emails to both owner and renter
+    await sendBookingCreationEmails(populatedBooking);
+
+    return populatedBooking.toObject();
 
   } catch (error) {
     await session.abortTransaction();
@@ -331,6 +319,8 @@ const confirmBooking = async (bookingId, ownerId) => {
     // Get and verify booking
     const booking = await Booking.findById(bookingId)
       .populate('owner')
+      .populate('renter', 'first_name last_name email')
+      .populate('ad', 'title')
       .session(session);
     
     if (!booking) throw notFound('Booking not found', 404);
@@ -348,6 +338,9 @@ const confirmBooking = async (bookingId, ownerId) => {
     // Save changes
     await booking.save({ session });
     await session.commitTransaction();
+
+    // Send confirmation emails
+    await sendBookingConfirmationEmails(booking);
 
     // Return populated booking
     return await Booking.findById(booking._id)
@@ -377,6 +370,8 @@ const rejectBooking = async (bookingId, ownerId, rejectionReason) => {
     // Get booking and verify ownership
     const booking = await Booking.findById(bookingId)
       .populate('owner')
+      .populate('renter', 'first_name last_name email')
+      .populate('ad', 'title')
       .session(session);
     
     if (!booking) throw notFound('Booking not found', 404);
@@ -393,8 +388,11 @@ const rejectBooking = async (bookingId, ownerId, rejectionReason) => {
     booking.rejectionReason = rejectionReason;
 
     // Save changes
-    await booking.save({ session});
+    await booking.save({ session });
     await session.commitTransaction();
+
+    // Send rejection emails
+    await sendBookingRejectionEmails(booking, rejectionReason);
 
     // Return updated booking
     return await Booking.findById(booking._id)
@@ -412,16 +410,19 @@ const rejectBooking = async (bookingId, ownerId, rejectionReason) => {
 
 const cancelBooking = async (bookingId, userId, reason) => {
   try {
-    const booking = await Booking.findById(bookingId).populate('ad');
+    const booking = await Booking.findById(bookingId)
+      .populate('ad')
+      .populate('renter', 'first_name last_name email')
+      .populate('owner', 'first_name last_name email');
     
     if (!booking) {
       throw notFound('Booking not found', 404);
     }
     
     // Check if user can cancel (renter or owner)
-    if (booking.renter.toString() !== userId.toString() && 
-        booking.owner.toString() !== userId.toString()) {
-      throw forbidden('You can only cancel your own bookings', 403);
+    if (booking.renter._id.toString() !== userId.toString() && 
+        booking.owner._id.toString() !== userId.toString()) {
+      throw unauthorized('You can only cancel your own bookings', 403);
     }
     
     if (!['pending', 'confirmed'].includes(booking.status)) {
@@ -442,6 +443,9 @@ const cancelBooking = async (bookingId, userId, reason) => {
     booking.cancelledAt = new Date();
     booking.cancellationReason = reason;
     await booking.save();
+    
+    // Send cancellation emails
+    await sendBookingCancellationEmails(booking, reason, userId);
     
     return {
       success: true,
@@ -512,7 +516,7 @@ const getBookingDetails = async (bookingId, userId) => {
     // Check if user has access to this booking
     if (booking.renter._id.toString() !== userId.toString() && 
         booking.owner._id.toString() !== userId.toString()) {
-      throw forbidden('Access denied', 403);
+      throw unauthorized('Access denied', 403);
     }
     
     return {
@@ -543,7 +547,10 @@ const updateBookingStatus = async (bookingId, userId, updateData) => {
   const booking = await Booking.findOne({
     _id: new ObjectId(bookingId),
     $or: [{ renter: new ObjectId(userId) }, { owner: new ObjectId(userId) }]
-  });
+  })
+  .populate('ad', 'title')
+  .populate('renter', 'first_name last_name email')
+  .populate('owner', 'first_name last_name email');
 
   if (!booking) {
     throw new Error('Booking not found or unauthorized access');
@@ -584,7 +591,13 @@ const updateBookingStatus = async (bookingId, userId, updateData) => {
     bookingId,
     updateObj,
     { new: true }
-  );
+  )
+  .populate('ad', 'title')
+  .populate('renter', 'first_name last_name email')
+  .populate('owner', 'first_name last_name email');
+
+  // Send status update emails
+  await sendBookingStatusUpdateEmails(updatedBooking, updateData);
 
   return updatedBooking;
 };
