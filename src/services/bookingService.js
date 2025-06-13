@@ -561,7 +561,7 @@ const updateBookingStatus = async (bookingId, userId, updateData) => {
     if (!validStatuses.pickup.includes(pickupStatus)) {
       throw new Error(`Invalid pickupStatus: ${pickupStatus}`);
     }
-    if (pickupStatus === 'completed' && booking.pickupStatus !== 'in-progress') {
+    if (pickupStatus === 'completed') {
       throw new Error('Cannot complete pickup that is not in-progress');
     }
   }
@@ -570,7 +570,7 @@ const updateBookingStatus = async (bookingId, userId, updateData) => {
     if (!validStatuses.return.includes(returnStatus)) {
       throw new Error(`Invalid returnStatus: ${returnStatus}`);
     }
-    if (returnStatus === 'completed' && booking.returnStatus !== 'in-progress') {
+    if (returnStatus === 'completed') {
       throw new Error('Cannot complete return that is not in-progress');
     }
   }
