@@ -1,5 +1,7 @@
 const {updateShipmentStatus, createShipment, getShipmentDetails} = require('../services/shipmentService')
 const Booking = require('../models/Booking');
+const Shipment = require('../models/Shipment');
+const { sendShipmentCreationEmails, sendShipmentStatusUpdateEmails } = require('../utils/sendMail');
 
 // Update shipment status
 const updateStatus = async (req, res) => {
@@ -9,6 +11,9 @@ const updateStatus = async (req, res) => {
     const userId = req.user._id;
 
     const shipment = await updateShipmentStatus(shipmentId, userId, newStatus);
+
+    // Send email notifications
+    await sendShipmentStatusUpdateEmails(shipment, newStatus);
 
     res.json({
       success: true,
@@ -30,7 +35,7 @@ const create = async (req, res) => {
     const userId = req.user._id;
 
     // Determine sender/receiver based on shipment type
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId).populate('ad');
     if (!booking) throw new Error('Booking not found');
 
     const sender = type === 'outbound' ? booking.owner : booking.renter;
@@ -48,6 +53,22 @@ const create = async (req, res) => {
       receiver,
       { courier, trackingNumber, notes }
     );
+
+    // Populate shipment with necessary data for email
+    const populatedShipment = await Shipment.findById(shipment._id)
+      .populate('booking', 'startDate endDate')
+      .populate('sender', 'first_name last_name email phoneNumber')
+      .populate('receiver', 'first_name last_name email phoneNumber')
+      .populate({
+        path: 'booking',
+        populate: {
+          path: 'ad',
+          select: 'title'
+        }
+      });
+
+    // Send email notifications
+    await sendShipmentCreationEmails(populatedShipment);
 
     res.status(201).json({
       success: true,

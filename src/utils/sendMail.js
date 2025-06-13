@@ -358,6 +358,146 @@ const sendBookingStatusUpdateEmails = async (booking, updateData) => {
   await sendEmail(booking.owner.email, ownerSubject, ownerMessage);
 };
 
+const sendShipmentCreationEmails = async (shipment) => {
+  // Send email to sender
+  const senderSubject = 'Shipment Created Successfully';
+  const senderMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Shipment Created Successfully</h2>
+      <p>Your ${shipment.type} shipment has been created successfully.</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <h3>Shipment Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Type:</strong> ${shipment.type}</li>
+          <li><strong>Status:</strong> ${shipment.status}</li>
+          ${shipment.courier ? `<li><strong>Courier:</strong> ${shipment.courier}</li>` : ''}
+          ${shipment.trackingNumber ? `<li><strong>Tracking Number:</strong> ${shipment.trackingNumber}</li>` : ''}
+          ${shipment.notes ? `<li><strong>Notes:</strong> ${shipment.notes}</li>` : ''}
+        </ul>
+        <h3>Booking Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Item:</strong> ${shipment.booking.ad.title}</li>
+          <li><strong>Start Date:</strong> ${new Date(shipment.booking.startDate).toLocaleDateString()}</li>
+          <li><strong>End Date:</strong> ${new Date(shipment.booking.endDate).toLocaleDateString()}</li>
+        </ul>
+        <h3>Receiver Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Name:</strong> ${shipment.receiver.first_name} ${shipment.receiver.last_name}</li>
+          <li><strong>Email:</strong> ${shipment.receiver.email}</li>
+          ${shipment.receiver.phoneNumber ? `<li><strong>Phone:</strong> ${shipment.receiver.phoneNumber}</li>` : ''}
+        </ul>
+      </div>
+      <p>Please update the shipment status once it's sent.</p>
+    </div>
+  `;
+  await sendEmail(shipment.sender.email, senderSubject, senderMessage);
+
+  // Send email to receiver
+  const receiverSubject = 'New Shipment Created';
+  const receiverMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>New Shipment Created</h2>
+      <p>A new ${shipment.type} shipment has been created for your booking.</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <h3>Shipment Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Type:</strong> ${shipment.type}</li>
+          <li><strong>Status:</strong> ${shipment.status}</li>
+          ${shipment.courier ? `<li><strong>Courier:</strong> ${shipment.courier}</li>` : ''}
+          ${shipment.trackingNumber ? `<li><strong>Tracking Number:</strong> ${shipment.trackingNumber}</li>` : ''}
+          ${shipment.notes ? `<li><strong>Notes:</strong> ${shipment.notes}</li>` : ''}
+        </ul>
+        <h3>Booking Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Item:</strong> ${shipment.booking.ad.title}</li>
+          <li><strong>Start Date:</strong> ${new Date(shipment.booking.startDate).toLocaleDateString()}</li>
+          <li><strong>End Date:</strong> ${new Date(shipment.booking.endDate).toLocaleDateString()}</li>
+        </ul>
+        <h3>Sender Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Name:</strong> ${shipment.sender.first_name} ${shipment.sender.last_name}</li>
+          <li><strong>Email:</strong> ${shipment.sender.email}</li>
+          ${shipment.sender.phoneNumber ? `<li><strong>Phone:</strong> ${shipment.sender.phoneNumber}</li>` : ''}
+        </ul>
+      </div>
+      <p>You will receive another email when the shipment status is updated.</p>
+    </div>
+  `;
+  await sendEmail(shipment.receiver.email, receiverSubject, receiverMessage);
+};
+
+const sendShipmentStatusUpdateEmails = async (shipment, newStatus) => {
+  const statusMessages = {
+    'sent': 'has been sent',
+    'received': 'has been received',
+    'cancelled': 'has been cancelled'
+  };
+
+  // Send email to sender
+  const senderSubject = `Shipment ${statusMessages[newStatus]}`;
+  const senderMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Shipment Status Update</h2>
+      <p>Your ${shipment.type} shipment ${statusMessages[newStatus]}.</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <h3>Shipment Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Type:</strong> ${shipment.type}</li>
+          <li><strong>Status:</strong> ${newStatus}</li>
+          ${shipment.courier ? `<li><strong>Courier:</strong> ${shipment.courier}</li>` : ''}
+          ${shipment.trackingNumber ? `<li><strong>Tracking Number:</strong> ${shipment.trackingNumber}</li>` : ''}
+          ${shipment.notes ? `<li><strong>Notes:</strong> ${shipment.notes}</li>` : ''}
+        </ul>
+        <h3>Booking Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Item:</strong> ${shipment.booking.ad.title}</li>
+          <li><strong>Start Date:</strong> ${new Date(shipment.booking.startDate).toLocaleDateString()}</li>
+          <li><strong>End Date:</strong> ${new Date(shipment.booking.endDate).toLocaleDateString()}</li>
+        </ul>
+        <h3>Receiver Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Name:</strong> ${shipment.receiver.first_name} ${shipment.receiver.last_name}</li>
+          <li><strong>Email:</strong> ${shipment.receiver.email}</li>
+          ${shipment.receiver.phoneNumber ? `<li><strong>Phone:</strong> ${shipment.receiver.phoneNumber}</li>` : ''}
+        </ul>
+      </div>
+    </div>
+  `;
+  await sendEmail(shipment.sender.email, senderSubject, senderMessage);
+
+  // Send email to receiver
+  const receiverSubject = `Shipment ${statusMessages[newStatus]}`;
+  const receiverMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Shipment Status Update</h2>
+      <p>The ${shipment.type} shipment ${statusMessages[newStatus]}.</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <h3>Shipment Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Type:</strong> ${shipment.type}</li>
+          <li><strong>Status:</strong> ${newStatus}</li>
+          ${shipment.courier ? `<li><strong>Courier:</strong> ${shipment.courier}</li>` : ''}
+          ${shipment.trackingNumber ? `<li><strong>Tracking Number:</strong> ${shipment.trackingNumber}</li>` : ''}
+          ${shipment.notes ? `<li><strong>Notes:</strong> ${shipment.notes}</li>` : ''}
+        </ul>
+        <h3>Booking Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Item:</strong> ${shipment.booking.ad.title}</li>
+          <li><strong>Start Date:</strong> ${new Date(shipment.booking.startDate).toLocaleDateString()}</li>
+          <li><strong>End Date:</strong> ${new Date(shipment.booking.endDate).toLocaleDateString()}</li>
+        </ul>
+        <h3>Sender Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li><strong>Name:</strong> ${shipment.sender.first_name} ${shipment.sender.last_name}</li>
+          <li><strong>Email:</strong> ${shipment.sender.email}</li>
+          ${shipment.sender.phoneNumber ? `<li><strong>Phone:</strong> ${shipment.sender.phoneNumber}</li>` : ''}
+        </ul>
+      </div>
+    </div>
+  `;
+  await sendEmail(shipment.receiver.email, receiverSubject, receiverMessage);
+};
+
 module.exports = {
   sendEmail,
   sendPasswordResetEmail,
@@ -368,5 +508,7 @@ module.exports = {
   sendBookingCreationEmails,
   sendBookingRejectionEmails,
   sendBookingCancellationEmails,
-  sendBookingStatusUpdateEmails
+  sendBookingStatusUpdateEmails,
+  sendShipmentCreationEmails,
+  sendShipmentStatusUpdateEmails
 };
