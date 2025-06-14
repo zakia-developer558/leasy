@@ -3,7 +3,17 @@ const { ObjectId } = require('mongoose').Types;
 const { notFound, unauthorized } = require('../errors/httpError');
 
 const updateShipmentStatus = async (shipmentId, userId, newStatus) => {
-  const shipment = await Shipment.findById(shipmentId).populate('booking');
+  const shipment = await Shipment.findById(shipmentId)
+    .populate('booking')
+    .populate('sender', 'first_name last_name email phoneNumber')
+    .populate('receiver', 'first_name last_name email phoneNumber')
+    .populate({
+      path: 'booking',
+      populate: {
+        path: 'ad',
+        select: 'title'
+      }
+    });
   
   if (!shipment) {
     throw new Error('Shipment not found');
