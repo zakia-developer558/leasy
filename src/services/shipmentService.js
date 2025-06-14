@@ -86,8 +86,38 @@ const getShipmentDetails = async (shipmentId, userId) => {
   return shipment;
 };
 
+const getShipmentsByBookingId = async (bookingId, userId) => {
+  const shipments = await Shipment.find({ booking: bookingId })
+    .populate('booking', 'startDate endDate totalAmount status')
+    .populate('sender', 'first_name last_name email phoneNumber')
+    .populate('receiver', 'first_name last_name email phoneNumber')
+    .populate({
+      path: 'booking',
+      populate: {
+        path: 'ad',
+        select: 'title photos price'
+      }
+    });
+
+  if (!shipments.length) {
+    throw notFound('No shipments found for this booking', 404);
+  }
+
+  // Check if user is authorized to view these shipments
+  const isAuthorized = shipments.some(
+    shipment => shipment.sender._id.equals(userId) || shipment.receiver._id.equals(userId)
+  );
+
+  if (!isAuthorized) {
+    throw unauthorized('You are not authorized to view these shipments', 403);
+  }
+
+  return shipments;
+};
+
 module.exports = {
   updateShipmentStatus,
   createShipment,
-  getShipmentDetails
+  getShipmentDetails,
+  getShipmentsByBookingId
 };

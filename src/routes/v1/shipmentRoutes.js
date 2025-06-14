@@ -1,8 +1,15 @@
 const express = require('express');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
-const { create, updateStatus, getDetails } = require('../../controllers/shipmentController');
+const { create, updateStatus, getDetails, getByBookingId } = require('../../controllers/shipmentController');
 
 const shipRouter = express.Router();
+
+// Get shipments by booking ID
+shipRouter.get(
+  '/booking/:bookingId',
+  authMiddleware,
+  getByBookingId
+);
 
 // Get shipment details
 shipRouter.get(

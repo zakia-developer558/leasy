@@ -1,4 +1,4 @@
-const {updateShipmentStatus, createShipment, getShipmentDetails} = require('../services/shipmentService')
+const {updateShipmentStatus, createShipment, getShipmentDetails, getShipmentsByBookingId} = require('../services/shipmentService')
 const Booking = require('../models/Booking');
 const Shipment = require('../models/Shipment');
 const { sendShipmentCreationEmails, sendShipmentStatusUpdateEmails } = require('../utils/sendMail');
@@ -102,8 +102,29 @@ const getDetails = async (req, res) => {
   }
 };
 
+// Get shipments by booking ID
+const getByBookingId = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = req.user._id;
+
+    const shipments = await getShipmentsByBookingId(bookingId, userId);
+
+    res.json({
+      success: true,
+      data: shipments
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   updateStatus,
   create,
-  getDetails
+  getDetails,
+  getByBookingId
 };
