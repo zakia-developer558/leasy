@@ -8,7 +8,8 @@ const {
   verifyEmail, 
   handleOnfidoWebhook,
   initiateVerification,
-  fetchProfile
+  fetchProfile,
+  fetchProfileByEmail
 } = require('../../controllers/authController');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
 const authRouter = express.Router();
@@ -25,5 +26,6 @@ authRouter.post(
 );
 authRouter.post('/verify/onfido', authMiddleware, initiateVerification);
 authRouter.get('/get-profile', authMiddleware, fetchProfile);
+authRouter.get('/get-profile-by-email', fetchProfileByEmail);
 
 module.exports = authRouter;

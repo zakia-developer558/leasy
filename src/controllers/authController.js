@@ -1,5 +1,5 @@
 const { ForgotPasswordSchema, ResetPasswordSchema, UserLoginSchema, UserRegistrationSchema } = require("../validations/authSchemaValidator");
-const { forgotPassword, loginUser, registerUser, resetPassword, verifyEmailToken, startVerification, getProfile } = require("../services/authService");
+const { forgotPassword, loginUser, registerUser, resetPassword, verifyEmailToken, startVerification, getProfile, getProfileByEmail } = require("../services/authService");
 const { z } = require("zod");
 const { CustomError } = require("../errors/CustomeError");
 const onfido = require('../utils/onfido')
@@ -233,6 +233,29 @@ const fetchProfile = async (req, res) => {
     });
   }
 };
+
+const fetchProfileByEmail = async (req, res) => {
+  try {
+    const { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      });
+    }
+
+    const result = await getProfileByEmail(email);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Profile by email controller error:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || 'Failed to fetch profile'
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -242,5 +265,5 @@ module.exports = {
   handleOnfidoWebhook,
   initiateVerification,
   fetchProfile,
-  
+  fetchProfileByEmail,
 };

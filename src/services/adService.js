@@ -564,18 +564,27 @@ const getAdDetails = async (adId, userId = null) => {
 const searchRentals = async (filters = {}) => {
   try {
     const {
+      title,
       location,
       priceMin,
       priceMax,
       category,
       subcategory,
-      availabilityDates,
+      startDate,
+      endDate,
       page = 1,
-      limit = 10
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
     } = filters;
 
     // Base query for published ads
     const query = { status: 'published' };
+
+    // Title search (case-insensitive)
+    if (title) {
+      query.title = { $regex: title, $options: 'i' };
+    }
 
     // Location filter (using geoNear if coordinates provided)
     if (location?.coordinates) {
@@ -609,20 +618,41 @@ const searchRentals = async (filters = {}) => {
       query.subcategory = subcategory;
     }
 
-    // Availability date filter
-    if (availabilityDates) {
-      query['availability.months'] = { 
-        $in: availabilityDates.months.map(m => new RegExp(m, 'i'))
-      };
-      if (availabilityDates.daysOfWeek) {
-        query['availability.daysOfWeek'] = {
-          $in: availabilityDates.daysOfWeek.map(d => new RegExp(d, 'i'))
-        };
-      }
+    // Date range availability filter
+    if (startDate || endDate) {
+      const start = startDate ? new Date(startDate) : new Date();
+      const end = endDate ? new Date(endDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 days if no end date
+
+      // Check if the dates are available (not in bookedDates or confirmedBookings)
+      query.$and = [
+        {
+          $or: [
+            { bookedDates: { $not: { $elemMatch: { $gte: start, $lte: end } } } },
+            { bookedDates: { $exists: false } }
+          ]
+        },
+        {
+          $or: [
+            { confirmedBookings: { $not: { $elemMatch: { $gte: start, $lte: end } } } },
+            { confirmedBookings: { $exists: false } }
+          ]
+        }
+      ];
+    }
+
+    // Sort options
+    const sortOptions = {};
+    if (sortBy === 'price') {
+      sortOptions.price = sortOrder === 'asc' ? 1 : -1;
+    } else if (sortBy === 'rating') {
+      sortOptions['createdBy.sellerRating.average'] = sortOrder === 'asc' ? 1 : -1;
+    } else {
+      sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
     }
 
     // Execute search with pagination
     const results = await Add.find(query)
+      .sort(sortOptions)
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('createdBy', 'first_name sellerRating')
@@ -637,16 +667,16 @@ const searchRentals = async (filters = {}) => {
       pagination: {
         total: totalCount,
         page,
-        pages: Math.ceil(totalCount / limit),
-        limit
+        limit,
+        pages: Math.ceil(totalCount / limit)
       }
     };
 
   } catch (error) {
-    console.error('Search Service Error:', error);
     throw error;
   }
 };
+
 module.exports = {
   createAd,
   previewAd,

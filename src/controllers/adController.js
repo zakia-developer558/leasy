@@ -363,14 +363,18 @@ const getAdDetailsController = async (req, res, next) => {
 const searchRentalsController = async (req, res, next) => {
   try {
     const filters = {
+      title: req.query.title,
       location: req.query.location && JSON.parse(req.query.location),
       priceMin: req.query.priceMin,
       priceMax: req.query.priceMax,
       category: req.query.category,
       subcategory: req.query.subcategory,
-      availabilityDates: req.query.availability && JSON.parse(req.query.availability),
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
       page: parseInt(req.query.page) || 1,
-      limit: parseInt(req.query.limit) || 10
+      limit: parseInt(req.query.limit) || 10,
+      sortBy: req.query.sortBy || 'createdAt',
+      sortOrder: req.query.sortOrder || 'desc'
     };
 
     const { success, results, pagination } = await searchRentals(filters);
@@ -379,7 +383,6 @@ const searchRentalsController = async (req, res, next) => {
       return res.status(200).json({
         success: true,
         message: 'No rentals found matching your criteria',
-        suggestions: await getSearchSuggestions(filters),
         results: [],
         pagination
       });
