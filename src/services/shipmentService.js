@@ -4,16 +4,15 @@ const { notFound, unauthorized } = require('../errors/httpError');
 
 const updateShipmentStatus = async (shipmentId, userId, newStatus) => {
   const shipment = await Shipment.findById(shipmentId)
-    .populate('booking')
-    .populate('sender', 'first_name last_name email phoneNumber')
-    .populate('receiver', 'first_name last_name email phoneNumber')
     .populate({
       path: 'booking',
       populate: {
         path: 'ad',
         select: 'title'
       }
-    });
+    })
+    .populate('sender', 'first_name last_name email phoneNumber')
+    .populate('receiver', 'first_name last_name email phoneNumber');
   
   if (!shipment) {
     throw new Error('Shipment not found');
@@ -55,7 +54,19 @@ const updateShipmentStatus = async (shipmentId, userId, newStatus) => {
     shipment.receivedAt = new Date();
   }
 
-  return await shipment.save();
+  const updatedShipment = await shipment.save();
+  
+  // Populate the saved shipment with all necessary data
+  return await Shipment.findById(updatedShipment._id)
+    .populate({
+      path: 'booking',
+      populate: {
+        path: 'ad',
+        select: 'title'
+      }
+    })
+    .populate('sender', 'first_name last_name email phoneNumber')
+    .populate('receiver', 'first_name last_name email phoneNumber');
 };
 
 const createShipment = async (bookingId, type, senderId, receiverId, shipmentData) => {
