@@ -89,7 +89,14 @@ const BookingSchema = new mongoose.Schema({
     index: { expires: 0 }
   },
   pickupConfirmedAt: Date,
-  returnConfirmedAt: Date
+  returnConfirmedAt: Date,
+
+  // Unique Booking ID
+  bookingId: {
+    type: String,
+    unique: true, // Ensure uniqueness
+    required: true // Make sure bookingId is always present
+  }
 
 }, {
   timestamps: true,
@@ -98,7 +105,6 @@ const BookingSchema = new mongoose.Schema({
 });
 
 // Indexes
-BookingSchema.index({ bookingId: 1 });
 BookingSchema.index({ ad: 1, status: 1 });
 BookingSchema.index({ renter: 1, status: 1 });
 BookingSchema.index({ owner: 1, status: 1 });
@@ -112,7 +118,7 @@ BookingSchema.virtual('duration').get(function() {
 });
 
 // Generate unique booking ID
-BookingSchema.pre('save', async function(next) {
+BookingSchema.pre('validate', async function(next) {
   if (!this.bookingId) {
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -120,13 +126,14 @@ BookingSchema.pre('save', async function(next) {
   }
   next();
 });
-//delete holds
+
+// Handle deletion of holds
 BookingSchema.post('delete', async function(doc) {
   if (doc.status === 'hold') {
-    await Add.findByIdAndUpdate(doc.ad, {
+    await mongoose.model('Ad').findByIdAndUpdate(doc.ad, {
       $pull: { bookedDates: { $in: doc.bookedDates } }
     });
-    console.log(`Released dates for expired hold (${doc._id}) after 1 minute`);
+    console.log(`Released dates for expired hold (${doc._id})`);
   }
 });
 
