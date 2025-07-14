@@ -1,6 +1,6 @@
 const express = require('express');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
-const { createAdController, previewAdController, applyAdBoostController, recalculateScoreController, updateUserRankingController, applyProfileBoostController, updateAdController, deleteAdController, getAllAdsController, createDraftAdController, getUserAdsController, getAdDetailsController, searchRentalsController } = require('../../controllers/adController');
+const { createAdController, previewAdController, applyAdBoostController, recalculateScoreController, updateUserRankingController, applyProfileBoostController, updateAdController, deleteAdController, getAllAdsController, createDraftAdController, getUserAdsController, getAdDetailsController, searchRentalsController, getAdDescriptionController } = require('../../controllers/adController');
 const adRouter = express.Router();
 
 adRouter.post('/create-ad', authMiddleware,createAdController);
@@ -15,5 +15,6 @@ adRouter.delete('/delete-listing/:id', authMiddleware, deleteAdController);
 adRouter.get('/all-user-adds', authMiddleware, getUserAdsController);
 adRouter.get('/get-ads/:id', getAdDetailsController);
 adRouter.get('/search',searchRentalsController)
+adRouter.get('/ad-description/:id', getAdDescriptionController);
 
 module.exports = adRouter;

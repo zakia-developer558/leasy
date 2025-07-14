@@ -518,7 +518,7 @@ const getAdDetails = async (adId, userId = null) => {
       .lean();
 
     if (!ad) {
-      throw notFound('Ad not found', 404);
+      throw badRequest('Ad not found', 404);
     }
 
     // Manually populate subcategory if it exists
@@ -677,6 +677,21 @@ const searchRentals = async (filters = {}) => {
   }
 };
 
+const getAdDescription = async (adId) => {
+  try {
+    const ad = await Add.findById(adId).select('description').lean();
+    if (!ad) {
+      throw badRequest('Ad not found', 404);
+    }
+    return {
+      success: true,
+      description: ad.description || ''
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createAd,
   previewAd,
@@ -691,5 +706,6 @@ module.exports = {
   createDraftAd,
   getUserAds,
   getAdDetails,
-  searchRentals
+  searchRentals,
+  getAdDescription
 };

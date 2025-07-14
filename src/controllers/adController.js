@@ -16,7 +16,8 @@ const {
   createDraftAd,
   getUserAds,
   getAdDetails,
-  searchRentals
+  searchRentals,
+  getAdDescription
 } = require('../services/adService');
 const { getProfile } = require('../services/authService');
 const { createAdSchema, updateAdSchema } = require('../validations/adSchemaValidation');
@@ -446,6 +447,28 @@ const searchRentalsController = async (req, res, next) => {
     next(error);
   }
 };
+
+const getAdDescriptionController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ad ID is required'
+      });
+    }
+    const { success, description } = await getAdDescription(id);
+    return res.status(200).json({ success, description });
+  } catch (error) {
+    if (error.isOperational) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        error: error.message
+      });
+    }
+    next(error);
+  }
+};
 module.exports = {
   createAdController,
   previewAdController,
@@ -459,6 +482,7 @@ module.exports = {
   createDraftAdController,
   getUserAdsController,
   getAdDetailsController,
-  searchRentalsController
+  searchRentalsController,
+  getAdDescriptionController
   
 };
