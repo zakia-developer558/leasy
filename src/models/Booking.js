@@ -95,7 +95,7 @@ const BookingSchema = new mongoose.Schema({
   bookingId: {
     type: String,
     unique: true, // Ensure uniqueness
-    required: true // Make sure bookingId is always present
+    required: true 
   }
 
 }, {

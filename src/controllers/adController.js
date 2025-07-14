@@ -324,25 +324,68 @@ const getUserAdsController = async (req, res, next) => {
   }
 };
 
+// const getAdDetailsController = async (req, res, next) => {
+//   try {
+//     console.log(req.params.id)
+//     // Validate ad ID
+//     if (!req.params.id) {
+
+//       return res.status(400).json({
+//         success: false,
+//         error: 'Invalid ad ID'
+//       });
+//     }
+
+//     // Call service (passing the authenticated user ID if available)
+//     const { success, ad } = await getAdDetails(
+//       req.params.id, 
+//       req.user?._id
+//     );
+
+//     // Send success response
+//     return res.status(200).json({
+//       success,
+//       ad
+//     });
+
+//   } catch (error) {
+//     if (error.isOperational) {
+//       return res.status(error.statusCode || 400).json({
+//         success: false,
+//         error: error.message
+//       });
+//     }
+    
+//     next(error);
+//   }
+// };
 const getAdDetailsController = async (req, res, next) => {
   try {
-    console.log(req.params.id)
-    // Validate ad ID
-    if (!req.params.id) {
-
+    // Extract the full string from query params
+    const fullIdString = req.query._id;
+    
+    // Validate
+    if (!fullIdString) {
       return res.status(400).json({
         success: false,
         error: 'Invalid ad ID'
       });
     }
 
-    // Call service (passing the authenticated user ID if available)
-    const { success, ad } = await getAdDetails(
-      req.params.id, 
-      req.user?._id
-    );
+    // Extract just the MongoDB ID (last part after last underscore)
+    const mongoId = fullIdString.split('_').pop();
+    
+    // Optional: Validate it's a proper MongoDB ID format
+    if (!mongoose.Types.ObjectId.isValid(mongoId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid ad ID format'
+      });
+    }
 
-    // Send success response
+    // Call service with the extracted ID
+    const { success, ad } = await getAdDetails(mongoId, req.user?._id);
+
     return res.status(200).json({
       success,
       ad
@@ -355,7 +398,6 @@ const getAdDetailsController = async (req, res, next) => {
         error: error.message
       });
     }
-    
     next(error);
   }
 };
