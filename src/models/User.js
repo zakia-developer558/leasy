@@ -82,6 +82,15 @@ const UserSchema = new mongoose.Schema({
   sellerRating: {
     average: { type: Number, default: 0, min: 0, max: 5 },
     count: { type: Number, default: 0 }
+  },
+  // NEW FIELD: NOTIFICATION PREFERENCES
+  notificationPreferences: {
+    new_message: { type: Boolean, default: true },
+    new_order: { type: Boolean, default: true },
+    booking_confirmation: { type: Boolean, default: true },
+    payment_success: { type: Boolean, default: true }, // MANDATORY
+    payment_failure: { type: Boolean, default: true }, // MANDATORY
+    review_received: { type: Boolean, default: true }
   }
 });
 

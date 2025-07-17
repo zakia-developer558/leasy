@@ -5,6 +5,7 @@ const v1Router = require('./routes/v1/index');
 const path = require('path');
 const corsMiddleware = require('./config/cors-config');
 
+
 dotenv.config();
 
 // Call MongoDB connection

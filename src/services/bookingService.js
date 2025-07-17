@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { badRequest, notFound, unauthorized } = require("../errors/httpError");
-const Add = require("../models/Add");
+const Ad = require("../models/Add");
 const Booking = require("../models/Booking");
 const crypto = require('crypto');
 const axios = require('axios');
@@ -13,10 +13,12 @@ const {
   sendBookingCancellationEmails,
   sendBookingStatusUpdateEmails
 } = require('../utils/sendMail');
+const Chat = require('../models/Chat');
+const { notifyUser } = require('../utils/notification');
 
 const checkDateAvailability = async (adId, dates, bookingIdToExclude = null, session = null) => {
   const options = session ? { session } : {};
-  const ad = await Add.findById(adId, null, options).lean();
+  const ad = await Ad.findById(adId, null, options).lean();
 
   if (!ad) {
     throw notFound('Ad not found', 404);
@@ -83,7 +85,7 @@ const createBooking = async (bookingData, renterId) => {
     if (end <= start) throw badRequest('End date must be after start date', 400);
 
     // Get ad with session
-    const ad = await Add.findById(adId)
+    const ad = await Ad.findById(adId)
       .populate('createdBy')
       .session(session);
     
@@ -163,7 +165,10 @@ const createBooking = async (bookingData, renterId) => {
 
     // Send emails to both owner and renter
     await sendBookingCreationEmails(populatedBooking);
-
+    // Notify owner of new order
+    await notifyUser(populatedBooking.owner._id, 'new_order', { bookingId: populatedBooking._id });
+    // Notify renter of booking confirmation (pending)
+    await notifyUser(populatedBooking.renter._id, 'booking_confirmation', { bookingId: populatedBooking._id });
     return populatedBooking.toObject();
 
   } catch (error) {
@@ -374,7 +379,10 @@ const confirmBooking = async (bookingId, ownerId) => {
 
     // Send confirmation emails
     await sendBookingConfirmationEmails(booking);
-
+    // Notify renter of booking confirmation
+    await notifyUser(booking.renter._id, 'booking_confirmation', { bookingId: booking._id });
+    // Notify owner of booking confirmation
+    await notifyUser(booking.owner._id, 'booking_confirmation', { bookingId: booking._id });
     // Return populated booking
     return await Booking.findById(booking._id)
       .populate('ad', 'title photos price')
@@ -626,6 +634,32 @@ const updateBookingStatus = async (bookingId, userId, updateData) => {
   // Send status update emails
   await sendBookingStatusUpdateEmails(updatedBooking, updateData);
 
+  // --- Chat closing logic ---
+  if (returnStatus === 'completed') {
+    // Find all chats between this renter and owner
+    const chats = await Chat.find({
+      participants: { $all: [booking.renter._id, booking.owner._id] }
+    });
+    for (const chat of chats) {
+      // Update adRefs for this ad
+      let updated = false;
+      for (const ref of chat.adRefs) {
+        if (String(ref.adId) === String(booking.ad._id)) {
+          ref.status = 'returned';
+          updated = true;
+        }
+      }
+      // If all adRefs are returned, close the chat
+      if (updated) {
+        if (chat.adRefs.every(ref => ref.status === 'returned')) {
+          chat.isOpen = false;
+        }
+        await chat.save();
+      }
+    }
+  }
+  // --- End chat closing logic ---
+
   return updatedBooking;
 };
 
@@ -660,16 +694,18 @@ const handleTPayCallback = async (req, res) => {
       booking.status = 'confirmed';
       booking.confirmedAt = new Date(tr_date);
       await booking.save();
-      
-      // Notify owner and renter
-      await sendBookingConfirmation(booking);
+      // Notify owner and renter of payment success
+      await notifyUser(booking.owner._id, 'payment_success', { bookingId: booking._id, paymentId: tr_id });
+      await notifyUser(booking.renter._id, 'payment_success', { bookingId: booking._id, paymentId: tr_id });
+      // Send booking confirmation emails
+      await sendBookingConfirmationEmails(booking);
     } else {
       booking.paymentStatus = 'failed';
       booking.paymentAttempts += 1;
       await booking.save();
-      
       // Notify renter about failed payment
-      await sendPaymentFailureNotification(booking, tr_error);
+      await notifyUser(booking.renter._id, 'payment_failure', { bookingId: booking._id, paymentId: tr_id, reason: tr_error });
+      // Optionally: notify owner as well
     }
 
     return res.send('OK');

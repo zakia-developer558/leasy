@@ -1,14 +1,33 @@
 const { badRequest } = require('../errors/httpError');
 const { validateLocation } = require('../utils/geo');
-const Add = require('../models/Add');
+const Ad = require('../models/Add');
 const User = require('../models/User');
 const { getAdHighlightStatus } = require('../utils/highlight');
 const Category = require('../models/Category');
+const UserSubscription = require('../models/UserSubscription');
+const SubscriptionPlan = require('../models/SubscriptionPlan');
 
 const createAd = async (adData, userId) => {
   try {
+    // Enforce subscription plan limits
+    const activeSub = await UserSubscription.findOne({ user: userId, status: 'active' }).populate('plan');
+    if (!activeSub || !activeSub.plan) {
+      throw badRequest('You must have an active subscription to create a listing.', 403);
+    }
+    // Count current ads for this user
+    const currentAdsCount = await Ad.countDocuments({ createdBy: userId });
+    if (currentAdsCount >= activeSub.plan.listingLimit) {
+      throw badRequest(`You have reached your plan's listing limit (${activeSub.plan.listingLimit}). Upgrade your plan to add more listings.`, 403);
+    }
+    // Enforce featured ad limit
+    if (adData.isHighlighted) {
+      const currentFeaturedCount = await Ad.countDocuments({ createdBy: userId, isHighlighted: true });
+      if (currentFeaturedCount >= activeSub.plan.featuredAds) {
+        throw badRequest(`You have reached your plan's featured ad limit (${activeSub.plan.featuredAds}).`, 403);
+      }
+    }
 
-    const existingAd = await Add.findOne({ title: adData.title, createdBy: userId });
+    const existingAd = await Ad.findOne({ title: adData.title, createdBy: userId });
 
     if (existingAd) {
       throw badRequest('You already have an ad with this title', 400);
@@ -29,7 +48,7 @@ const createAd = async (adData, userId) => {
     }
 
     // Create and save ad
-    const ad = new Add({
+    const ad = new Ad({
       title: adData.title,
       description: adData.description,
       price: adData.price,
@@ -75,7 +94,7 @@ const createAd = async (adData, userId) => {
 const createDraftAd = async (adData, userId) => {
   try {
     
-    const existingAd = await Add.findOne({ title: adData.title, createdBy: userId });
+    const existingAd = await Ad.findOne({ title: adData.title, createdBy: userId });
 
     if (existingAd) {
       throw badRequest('You already have an ad with this title', 400);
@@ -96,7 +115,7 @@ const createDraftAd = async (adData, userId) => {
     }
 
     // Create and save ad
-    const ad = new Add({
+    const ad = new Ad({
       title: adData.title,
       description: adData.description,
       price: adData.price,
@@ -189,7 +208,7 @@ const previewAd = async (adData) => {
 const getAllRankedAds = async () => {
   try {
     // 1. Fetch Featured Ads (Active boosts)
-    const featuredAds = await Add.find({
+    const featuredAds = await Ad.find({
       'boost.boostType': 'featured',
       'boost.expiresAt': { $gt: new Date() }, // Only active boosts
       status: 'published'
@@ -198,7 +217,7 @@ const getAllRankedAds = async () => {
     .lean();
 
     // 2. Fetch Standard Ads (Ranked by score + recency)
-    const standardAds = await Add.find({
+    const standardAds = await Ad.find({
       $or: [
         { 'boost.boostType': 'none' },
         { 'boost.boostType': 'profile-rank' }
@@ -225,7 +244,7 @@ const getAllRankedAds = async () => {
 
 const applyBoost = async (adId, boostType, durationDays, userId) => {
   try {
-    const ad = await Add.findOne({ _id: adId, createdBy: userId });
+    const ad = await Ad.findOne({ _id: adId, createdBy: userId });
     if (!ad) throw badRequest('Ad not found or unauthorized');
 
     // Handle boost conflicts
@@ -269,7 +288,7 @@ const applyBoost = async (adId, boostType, durationDays, userId) => {
 };
 
 const calculateAdScore = async (adId, forceUpdate = false) => {
-  const ad = await Add.findById(adId);
+  const ad = await Ad.findById(adId);
   if (!ad) throw badRequest('Ad not found');
 
   const hoursSinceLastCalc = (new Date() - ad.rankingData.lastCalculated) / (1000 * 60 * 60);
@@ -305,7 +324,7 @@ const updateUserAdsRanking = async (userId) => {
   const hasActiveProfileBoost = user.profileBoost?.isActive && 
   user.profileBoost.expiresAt > new Date();
 
-  const ads = await Add.find({ createdBy: userId });
+  const ads = await Ad.find({ createdBy: userId });
   const bulkOps = ads.map(ad => {
     let score = 0;
     const ageInHours = (new Date() - ad.createdAt) / (1000 * 60 * 60);
@@ -330,7 +349,7 @@ const updateUserAdsRanking = async (userId) => {
   });
 
   if (bulkOps.length > 0) {
-    await Add.bulkWrite(bulkOps);
+    await Ad.bulkWrite(bulkOps);
   }
 };
 
@@ -401,7 +420,7 @@ const hasActiveBookingsForAd = async (adId) => {
 const updateAd = async (adId, userId, updateData) => {
   try {
     // 1. Find the ad and verify ownership
-    const ad = await Add.findOne({ _id: adId, createdBy: userId });
+    const ad = await Ad.findOne({ _id: adId, createdBy: userId });
     if (!ad) {
       throw new Error('Ad not found or unauthorized');
     }
@@ -443,7 +462,7 @@ const updateAd = async (adId, userId, updateData) => {
 const deleteAd = async (adId, userId) => {
   try {
     // Find and delete in one operation
-    const result = await Add.deleteOne({ 
+    const result = await Ad.deleteOne({ 
       _id: adId, 
       createdBy: userId 
     });
@@ -467,7 +486,7 @@ const deleteAd = async (adId, userId) => {
 
 const getUserAds = async (userId) => {
   try {
-    const ads = await Add.find({ 
+    const ads = await Ad.find({ 
       createdBy: userId,
       status: { $ne: 'deleted' }
     })
@@ -511,7 +530,7 @@ const getUserAds = async (userId) => {
 const getAdDetails = async (adId, userId = null) => {
   try {
     // Find the ad by ID and populate relevant fields
-    const ad = await Add.findById(adId)
+    const ad = await Ad.findById(adId)
       .populate('createdBy', 'first_name last_name phoneNumber sellerRating createdAt')
       .populate('category', 'name')
       .populate('contractTemplate', 'name')
@@ -538,7 +557,7 @@ const getAdDetails = async (adId, userId = null) => {
 
     // Add user's total published ads count
     if (ad.createdBy) {
-      const publishedAdsCount = await Add.countDocuments({
+      const publishedAdsCount = await Ad.countDocuments({
         createdBy: ad.createdBy._id,
         status: 'published'
       });
@@ -546,7 +565,7 @@ const getAdDetails = async (adId, userId = null) => {
     }
 
     // Increment view count
-    await Add.findByIdAndUpdate(adId, {
+    await Ad.findByIdAndUpdate(adId, {
       $inc: { 'rankingData.engagement.viewCount': 1 }
     }).exec();
 
@@ -621,7 +640,7 @@ const searchRentals = async (filters = {}) => {
     // Date range availability filter
     if (startDate || endDate) {
       const start = startDate ? new Date(startDate) : new Date();
-      const end = endDate ? new Date(endDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 days if no end date
+      const end = endDate ? new Date(startDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000); // Default 30 days if no end date
 
       // Check if the dates are available (not in bookedDates or confirmedBookings)
       query.$and = [
@@ -651,7 +670,7 @@ const searchRentals = async (filters = {}) => {
     }
 
     // Execute search with pagination
-    const results = await Add.find(query)
+    const results = await Ad.find(query)
       .sort(sortOptions)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -659,7 +678,7 @@ const searchRentals = async (filters = {}) => {
       .populate('category', 'name')
       .lean();
 
-    const totalCount = await Add.countDocuments(query);
+    const totalCount = await Ad.countDocuments(query);
 
     return {
       success: true,
@@ -679,7 +698,7 @@ const searchRentals = async (filters = {}) => {
 
 const getAdDescription = async (adId) => {
   try {
-    const ad = await Add.findById(adId).select('description').lean();
+    const ad = await Ad.findById(adId).select('description').lean();
     if (!ad) {
       throw badRequest('Ad not found', 404);
     }

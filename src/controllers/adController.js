@@ -1,6 +1,6 @@
 const { CustomError } = require('../errors/CustomeError');
 const { badRequest } = require('../errors/httpError');
-const Add = require('../models/Add');
+const Ad = require('../models/Add');
 const { 
   createAd, 
   previewAd, 

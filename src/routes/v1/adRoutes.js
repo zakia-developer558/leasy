@@ -1,6 +1,7 @@
 const express = require('express');
 const { authMiddleware } = require('../../middlewares/authMiddleware');
 const { createAdController, previewAdController, applyAdBoostController, recalculateScoreController, updateUserRankingController, applyProfileBoostController, updateAdController, deleteAdController, getAllAdsController, createDraftAdController, getUserAdsController, getAdDetailsController, searchRentalsController, getAdDescriptionController } = require('../../controllers/adController');
+
 const adRouter = express.Router();
 
 adRouter.post('/create-ad', authMiddleware,createAdController);
