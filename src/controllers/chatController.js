@@ -44,7 +44,7 @@ const getUserChats = async (req, res, next) => {
     const userId = req.user._id;
     const chats = await Chat.find({ participants: userId })
       .populate('participants', 'first_name last_name email')
-      .populate('adRefs.adId', 'title status');
+      .populate('adRefs.adId', 'title status photos');
     res.json({ success: true, chats });
   } catch (error) {
     next(error);

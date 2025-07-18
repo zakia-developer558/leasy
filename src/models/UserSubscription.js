@@ -18,6 +18,8 @@ const userSubscriptionSchema = new mongoose.Schema({
   },
   invoiceUrl: { type: String }, // link to invoice PDF or provider
   invoiceId: { type: String }, // reference to invoice in provider
+  adsUsed: { type: Number, default: 0 },
+  featuredAdsUsed: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

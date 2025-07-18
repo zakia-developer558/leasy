@@ -14,7 +14,7 @@ adRouter.post('/apply-profileboost', authMiddleware, applyProfileBoostController
 adRouter.patch('/update-listing/:id', authMiddleware,updateAdController);
 adRouter.delete('/delete-listing/:id', authMiddleware, deleteAdController);
 adRouter.get('/all-user-adds', authMiddleware, getUserAdsController);
-adRouter.get('/get-ads/:id', getAdDetailsController);
+adRouter.get('/get-ads/:fullIdString', getAdDetailsController);
 adRouter.get('/search',searchRentalsController)
 adRouter.get('/ad-description/:id', getAdDescriptionController);
 

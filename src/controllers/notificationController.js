@@ -70,6 +70,7 @@ const markNotificationsRead = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const { ids } = req.body;
+    console.log("Notification id's",ids)
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, error: 'No notification IDs provided.' });
     }
@@ -80,9 +81,21 @@ const markNotificationsRead = async (req, res, next) => {
   }
 };
 
+// GET /api/v1/notification/unread-count
+const getUnreadNotificationCount = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const count = await Notification.countDocuments({ user: userId, isRead: false });
+    res.json({ success: true, unreadCount: count });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getNotificationPreferences,
   updateNotificationPreferences,
   listNotifications,
-  markNotificationsRead
+  markNotificationsRead,
+  getUnreadNotificationCount
 }; 

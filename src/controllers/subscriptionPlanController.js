@@ -7,6 +7,8 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { sendNotificationEmail } = require('../utils/sendMail');
+const { uploadInvoiceToFirebase } = require('../utils/firebaseAdmin');
+const getStream = require('get-stream');
 
 // Helper: Check if user is admin
 function isAdmin(user) {
@@ -88,6 +90,8 @@ const getPlanById = async (req, res, next) => {
 };
 
 // Helper: Generate T-Pay payment link for subscription
+// This function authenticates with TPay, constructs the payment payload (including converting PLN to grosz),
+// and returns a payment URL for the user to complete the subscription payment.
 async function generateTPaySubscriptionLink({ amount, description, userId, planId, customerEmail }) {
   const config = {
     baseUrl: process.env.TPAY_BASE_URL || 'https://openapi.sandbox.tpay.com',
@@ -99,7 +103,7 @@ async function generateTPaySubscriptionLink({ amount, description, userId, planI
   };
 
   try {
-    // Step 1: Get OAuth2 access token
+    // Step 1: Get OAuth2 access token from TPay
     const tokenPayload = new URLSearchParams();
     tokenPayload.append('client_id', config.clientId);
     tokenPayload.append('client_secret', config.secret);
@@ -121,6 +125,7 @@ async function generateTPaySubscriptionLink({ amount, description, userId, planI
     // Step 2: Create payment transaction
     // Convert amount to grosz (int)
     const amountInGrosz = Math.round(amount * 100);
+    // Build the payment payload as required by TPay API
     const paymentPayload = {
       currency: 'PLN',
       description: description.substring(0, 128),
@@ -164,6 +169,7 @@ async function generateTPaySubscriptionLink({ amount, description, userId, planI
 
     console.log('TPay Payment Payload:', paymentPayload);
 
+    // Send payment creation request to TPay
     const paymentResponse = await axios.post(
       `${config.baseUrl}/marketplace/v1/transaction`,
       paymentPayload,
@@ -180,6 +186,7 @@ async function generateTPaySubscriptionLink({ amount, description, userId, planI
     if (!paymentResponse.data?.paymentUrl) {
       throw new Error('TPay did not return a payment URL');
     }
+    // Return the payment URL to redirect the user
     return paymentResponse.data.paymentUrl;
   } catch (error) {
     if (error.response) {
@@ -190,6 +197,8 @@ async function generateTPaySubscriptionLink({ amount, description, userId, planI
 }
 
 // Updated: Subscribe to a plan (user) with T-Pay payment link
+// This endpoint checks plan validity, ensures the user doesn't already have an active subscription,
+// generates a TPay payment link, and creates a pending subscription record.
 const subscribeToPlan = async (req, res, next) => {
   try {
     const userId = req.user._id;
@@ -235,9 +244,25 @@ const getMySubscription = async (req, res, next) => {
     const userId = req.user._id;
     const sub = await UserSubscription.findOne({ user: userId, status: 'active' }).populate('plan');
     if (!sub) {
-      return res.status(404).json({ success: false, error: 'No active subscription' });
+      return res.status(200).json({ success: true, subscription: null, usage: null, message: 'No active subscription' });
     }
-    res.json({ success: true, subscription: sub });
+    // Calculate usage and remaining using correct plan fields
+    const maxAds = sub.plan?.listingLimit || 0;
+    const maxFeaturedAds = sub.plan?.featuredAds || 0;
+    const adsUsed = sub.adsUsed || 0;
+    const featuredAdsUsed = sub.featuredAdsUsed || 0;
+    const adsLeft = maxAds - adsUsed;
+    const featuredAdsLeft = maxFeaturedAds - featuredAdsUsed;
+    res.json({
+      success: true,
+      subscription: sub,
+      usage: {
+        adsUsed,
+        adsLeft,
+        featuredAdsUsed,
+        featuredAdsLeft
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -266,14 +291,14 @@ const cancelMySubscription = async (req, res, next) => {
   }
 };
 
-// Helper: Generate PDF invoice and return file path
+// Helper: Generate PDF invoice and return public URL from Firebase Storage
+// This function creates a PDF invoice for a subscription, uploads it to Firebase Storage, and returns the public URL.
 async function generateInvoicePDF({ user, plan, subscription, invoiceId }) {
-  const invoiceDir = path.join(__dirname, '../../invoices');
-  if (!fs.existsSync(invoiceDir)) fs.mkdirSync(invoiceDir);
-  const fileName = `invoice_${invoiceId}.pdf`;
-  const filePath = path.join(invoiceDir, fileName);
+  const PDFDocument = require('pdfkit');
   const doc = new PDFDocument();
-  doc.pipe(fs.createWriteStream(filePath));
+  const buffers = [];
+  doc.on('data', buffers.push.bind(buffers));
+  doc.on('end', async () => {}); // No-op, handled below
   doc.fontSize(20).text('Subscription Invoice', { align: 'center' });
   doc.moveDown();
   doc.fontSize(12).text(`Invoice ID: ${invoiceId}`);
@@ -284,10 +309,38 @@ async function generateInvoicePDF({ user, plan, subscription, invoiceId }) {
   doc.text(`Subscription ID: ${subscription._id}`);
   doc.text(`Status: ${subscription.status}`);
   doc.end();
-  return filePath;
+  // Wait for PDF buffer
+  return new Promise(async (resolve, reject) => {
+    doc.on('end', async () => {
+      const pdfBuffer = Buffer.concat(buffers);
+      const filename = `invoices/invoice_${invoiceId}.pdf`;
+      try {
+        const invoiceUrl = await uploadInvoiceToFirebase(pdfBuffer, filename);
+        resolve(invoiceUrl);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    doc.on('error', reject);
+  });
+}
+
+// Helper: Increment ad usage for a user's active subscription
+async function incrementAdUsage(userId, isFeatured = false) {
+  const sub = await UserSubscription.findOne({ user: userId, status: 'active' }).populate('plan');
+  if (!sub) throw new Error('No active subscription');
+  if (sub.adsUsed >= (sub.plan?.maxAds || 0)) throw new Error('Ad limit reached');
+  sub.adsUsed += 1;
+  if (isFeatured) {
+    if (sub.featuredAdsUsed >= (sub.plan?.maxFeaturedAds || 0)) throw new Error('Featured ad limit reached');
+    sub.featuredAdsUsed += 1;
+  }
+  await sub.save();
 }
 
 // Updated T-Pay webhook handler for subscription payments with invoice generation
+// This endpoint is called by TPay after payment. It activates the subscription, generates an invoice,
+// and sends a confirmation email if payment is successful. If payment fails, it cancels the subscription.
 const handleTPaySubscriptionWebhook = async (req, res) => {
   try {
     const { hiddenDescription, tr_status, tr_paid, tr_id, tr_date, tr_error } = req.body;
@@ -306,19 +359,19 @@ const handleTPaySubscriptionWebhook = async (req, res) => {
       sub.status = 'active';
       sub.paymentStatus = 'paid';
       sub.startDate = new Date(tr_date) || new Date();
-      // Generate invoice
+      // Generate invoice and upload to Firebase
       const user = await User.findById(userId);
       const plan = await SubscriptionPlan.findById(planId);
       const invoiceId = `${sub._id}-${Date.now()}`;
-      const invoicePath = await generateInvoicePDF({ user, plan, subscription: sub, invoiceId });
-      sub.invoiceUrl = invoicePath;
+      const invoiceUrl = await generateInvoicePDF({ user, plan, subscription: sub, invoiceId });
+      sub.invoiceUrl = invoiceUrl;
       sub.invoiceId = invoiceId;
       await sub.save();
       // Send subscription confirmation email
       const subject = 'Subscription Activated';
       const message = `Dear ${user.first_name},\n\nYour subscription to the ${plan.name} plan is now active.\nThank you for subscribing!`;
       await sendNotificationEmail(user.email, subject, message);
-      return res.send('OK');
+      return res.json({ success: true, invoiceUrl });
     } else {
       sub.paymentStatus = 'failed';
       sub.status = 'cancelled';
@@ -352,6 +405,7 @@ const downloadInvoice = async (req, res, next) => {
 };
 
 // Get all invoices for the authenticated user
+// Returns a list of all invoices (with download links) for the current user.
 const getAllInvoices = async (req, res, next) => {
   try {
     const userId = req.user._id;

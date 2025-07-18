@@ -1,6 +1,7 @@
 const { CustomError } = require('../errors/CustomeError');
 const { badRequest } = require('../errors/httpError');
 const Ad = require('../models/Add');
+const mongoose = require("mongoose");
 const { 
   createAd, 
   previewAd, 
@@ -362,9 +363,10 @@ const getUserAdsController = async (req, res, next) => {
 // };
 const getAdDetailsController = async (req, res, next) => {
   try {
-    // Extract the full string from query params
-    const fullIdString = req.query._id;
     
+    // Extract the full string from query params
+    const fullIdString = req.params.fullIdString;
+    console.log("full sting", fullIdString)
     // Validate
     if (!fullIdString) {
       return res.status(400).json({
