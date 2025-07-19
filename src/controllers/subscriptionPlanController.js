@@ -8,7 +8,6 @@ const fs = require('fs');
 const path = require('path');
 const { sendNotificationEmail } = require('../utils/sendMail');
 const { uploadInvoiceToFirebase } = require('../utils/firebaseAdmin');
-const getStream = require('get-stream');
 
 // Helper: Check if user is admin
 function isAdmin(user) {
