@@ -342,16 +342,22 @@ async function incrementAdUsage(userId, isFeatured = false) {
 // and sends a confirmation email if payment is successful. If payment fails, it cancels the subscription.
 const handleTPaySubscriptionWebhook = async (req, res) => {
   try {
+    console.log('--- TPay Webhook Called ---');
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
     const { hiddenDescription, tr_status, tr_paid, tr_id, tr_date, tr_error } = req.body;
     if (!hiddenDescription) {
+      console.log('Missing hiddenDescription');
       return res.status(400).send('Missing hiddenDescription');
     }
     const [userId, planId] = hiddenDescription.split('_');
     if (!userId || !planId) {
+      console.log('Invalid hiddenDescription:', hiddenDescription);
       return res.status(400).send('Invalid hiddenDescription');
     }
     const sub = await UserSubscription.findOne({ user: userId, plan: planId, status: 'pending' });
     if (!sub) {
+      console.log('Subscription not found for user:', userId, 'plan:', planId);
       return res.status(404).send('Subscription not found');
     }
     if (tr_status === 'TRUE' && tr_paid === '1') {
@@ -370,11 +376,13 @@ const handleTPaySubscriptionWebhook = async (req, res) => {
       const subject = 'Subscription Activated';
       const message = `Dear ${user.first_name},\n\nYour subscription to the ${plan.name} plan is now active.\nThank you for subscribing!`;
       await sendNotificationEmail(user.email, subject, message);
+      console.log('Subscription activated and invoice generated:', invoiceUrl);
       return res.json({ success: true, invoiceUrl });
     } else {
       sub.paymentStatus = 'failed';
       sub.status = 'cancelled';
       await sub.save();
+      console.log('Payment failed:', tr_error);
       return res.status(400).send(tr_error || 'Payment failed');
     }
   } catch (error) {
